@@ -1,0 +1,11 @@
+*.asv
+*.mat
+*.fig
+*.jpg
+*.pdf
+*.png
+.DS_Store
+*.err 
+*.out
+*.vscode
+.vscode/
