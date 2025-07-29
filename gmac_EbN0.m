@@ -1,9 +1,9 @@
 function data = gmac_EbN0(k, Lmin, Lmax, alpha, ...
     EbN0db_lower, EbN0db_upper, adjustRadii, fixP1)
-% This script computes and plots active user spectral efficiency v EbN0_dB. 
+% This script plots active user spectral efficiency v EbN0_dB. 
 % Active user spectral efficiency=k*E[Ka]/n_total = L(1-alpha)/n via L, 
 % keeping alpha and n fixed. Note unlike in the paper, alpha in the code
-% represents the probability each user is silent, not active. 
+% represents the probability each user is silent, not active.
 % 
 % Specifically, for the number of users L in [Lmin, Lmax], find the minimum 
 % EbN0_dB needed in [EbN0db_lower, EbN0db_upper] to achieve a specified 
@@ -68,7 +68,6 @@ for iL = 1:num_L
 end
 fprintf('[Reached the end of gmac_EbN0 in %.2f]', toc(tStart));
 
-
 data.k = k;
 data.n = n;
 data.L = L_arr;
@@ -107,7 +106,7 @@ save([filename '.mat'], 'data', '-v7.3');
 fprintf(['\nIn binary search: epsTotal doesnt decrease monotonically with P ' ...
     'in %d/%d searches'], ...
     sum(~bin_search_epsTotal_decreases_w_P), num_L);
-
+%% 
 figure;
 plot(data.min_EbN0db, data.eff_mu, 'marker', '.', 'LineWidth', 2);
 hold on;

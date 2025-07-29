@@ -1,7 +1,7 @@
 function data = EbN0_KaBinomialUnknown_SRA(k, n, L, alpha, ...
     target_epsTotal, rad_l, rad_u, tail_prob, ...
     EbN0db_lower, EbN0db_upper, P1_asFactorOfP, ...
-    frac_TOL_binary, frac_TOL_golden, adjustRadii)
+    frac_TOL_binary, frac_TOL_golden, adjustRadii, log_file_name)
 % Find the minimal required EbN0 (in dB) such that the total error 
 % probability max(pMD,pFA)+pAUE is below the prescribed threshold
 % target_epsTotal, for a system whose number of active users is 
@@ -9,7 +9,7 @@ function data = EbN0_KaBinomialUnknown_SRA(k, n, L, alpha, ...
 % 
 % INPUTS
 %   k   : number of bits per symbol
-%   n   : framelength (number of complex DoFs)
+%   n   : framelength (number of real DoFs)
 %   L   : total num users, among which Ka is active
 %   alpha : probability that a user is silent, in replacement of E_Ka
 %   target_epsTotal : target total probability
@@ -25,8 +25,9 @@ function data = EbN0_KaBinomialUnknown_SRA(k, n, L, alpha, ...
 % requires EbN0 as input and returns the eps_MD, eps_FA, eps_AUE for that
 % given EbN0.
 
+log_file = fopen(log_file_name, 'a');
 tStart = tic;
-fprintf('Running EbN0_KaBinomialUnknown_SRA ...\n');
+fprintf(log_file, 'Running EbN0_KaBinomialUnknown_SRA ...\n');
 DEBUG = 0;
 
 %% debugging mode
@@ -50,7 +51,8 @@ end
 %% Ka is Binomial. Can be modified into other distributions.
 p_Ka = @(K) binopdf(K,L,1-alpha);
 E_Ka = L*(1-alpha);
-    
+
+% the factor of 2 below is because N0=2sigma^2=2
 P_lower = 2*k*10^(EbN0db_lower/10)/n;
 P_upper = 2*k*10^(EbN0db_upper/10)/n;
 
@@ -69,19 +71,22 @@ if adjustRadii == 1
 end
 %% Function to compute the RCU bound on three errors
 f_rcu = @(P,P1) RCU_KaRandomUnknown_SRA(P,P1,rad_l,rad_u, tail_prob, ...
-    k,n,L,E_Ka,p_Ka); % function handle
+    k,n,L,E_Ka,p_Ka, log_file_name); % function handle
 
 %% Search for the minimal required EbN0 that gives 
 % max(eps_MD,eps_FA)+eps_AUE below the specified threshold target_epsTotal.
 [epsMD_RCU, epsFA_RCU, epsAUE_RCU, epsTotal_RCU, P_RCU, optP1, bin_search_data] = ...
     binary_search_P_SRA(f_rcu, P_lower, P_upper, target_epsTotal, ...
-    target_epsTotal*frac_TOL_binary, P1_asFactorOfP, frac_TOL_golden); 
+    target_epsTotal*frac_TOL_binary, P1_asFactorOfP, frac_TOL_golden, log_file_name); 
 % use 1/20 TOL instead of 1/100 TOL for speed
 if P_RCU ~= -1
     min_EbN0db_RCU = 10*log10(n*P_RCU/k/2);
+    fprintf(log_file, ['binary search over P has converged to min_EbN0db_RCU=%e ' ...
+        'epsTotal_RCU=%e\n'], min_EbN0db_RCU, epsTotal_RCU);
 else
     min_EbN0db_RCU = -1; % the range [EbN0db_lower, EbN0db_upper] is too 
     % low to reach target_epsTotal
+    fprintf(log_file, 'binary search over P failed to find EbN0 in range that achieves target eps_total');
 end
 
 %% Save the results
@@ -112,7 +117,7 @@ data.optP1     = optP1;
 data.bin_search_data = bin_search_data;
 data.min_EbN0db_RCU = min_EbN0db_RCU;
 data.sim_time = sim_time;
-fprintf('[EbN0_KaBinomialUnknown_SRA finished in %f secs]\n', sim_time);
+fprintf(log_file, '[EbN0_KaBinomialUnknown_SRA finished in %f secs]\n', sim_time);
 
 % if DEBUG ~= 1
 %     filename = ['EbN0_KaPoissonUnknown_EKa_' num2str(E_Ka) '_target_epsMD_' ...
@@ -143,6 +148,7 @@ function [rad_l, rad_u] = radii_for_target_eps_SRA(n,L, tail_prob, E_Ka,p_Ka, ..
 % decoder defined with these rad_l,rad_u will never give a total error
 % below the target_epsTotal.
 
+fprintf(log_file, "Start adjusting rad_l and rad_u using tail_prob and target_epsTotal\n");
 % Initialise:
 rad_l = 0; 
 rad_u = 0;
@@ -181,4 +187,5 @@ if target_epsTotal < 1e-1
     rad_l = rad_l + 2;
     rad_u = rad_u + 2;
 end
+fprintf(log_file, "Adjusted radii to rad_l=%e, rad_u=%e", rad_l, rad_u);
 end

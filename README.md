@@ -2,7 +2,7 @@
 # Finite-Length Random Coding Achievability Bounds for Many-User Random Access
 
 This repository contains the MATLAB code that computes the finite-length achievability bounds in\
-[1] X. Liu, P. Pascual Cobo, and R. Venkataramanan, "*Many-User Multiple Access with Random User Activity: Achievability Bounds and Efficient Schemes*," in submission, 2024.\
+[1] X. Liu, P. Pascual Cobo, and R. Venkataramanan, "*Many-User Multiple Access with Random User Activity: Achievability Bounds and Efficient Schemes*," in submission, 2025.\
 [2] X. Liu, P. Pascual Cobo, and R. Venkataramanan, "*Many-User Multiple Access with Random User Activity*," in Proc. IEEE Int. Symp. Inf. Theory, 2024.
 
 This code is adapted from the source code by Khac-Hoang Ngo published at https://github.com/khachoang1412/UMA_random_user_activity.
@@ -21,5 +21,5 @@ Auxiliary functions:
 - `binary_search_P_SRA`: searches for the smallest *P* such that errors fall below a pre-specified threshold.
 
 ## Two example experiments:
-`gmac_RCU`:  computes and plots the three types of errors for varying *Eb/N0*.
+`gmac_RCU`:  computes and plots the three types of errors for varying $E_b/N_0$.
 `gmac_EbN0`: for a given active-user spectral efficiency, computes and plots the minimum *Eb/N0* needed for errors to fall below a pre-specified threshold.

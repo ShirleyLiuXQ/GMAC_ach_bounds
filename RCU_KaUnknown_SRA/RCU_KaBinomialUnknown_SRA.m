@@ -1,6 +1,6 @@
 function data = RCU_KaBinomialUnknown_SRA(k, n, L, alpha_list, ...
     EbN0db_list, rad_l_list, rad_u_list, tail_prob, obj, ...
-    P1_asFactorOfP, frac_TOL_golden)
+    P1_asFactorOfP, frac_TOL_golden, log_file_name)
 % Compute the RCU bounds on pMD, pFA, pAUE for the L-user GMAC with the 
 % number of active users unknown and following a Binomial distribution
 % Bin(L,1-alpha) i.e. among the L users, each user is active with prob 
@@ -36,6 +36,7 @@ function data = RCU_KaBinomialUnknown_SRA(k, n, L, alpha_list, ...
 % requires  target_eps_MD, target_eps_FA, target_eps_AUE and returns the
 % minimal EbN0 needed to achieve these targets.
 
+log_file = fopen(log_file_name, 'a');
 tStart = tic;
 DEBUG = 0;
 
@@ -67,10 +68,12 @@ data.tail_prob = tail_prob;
 if isempty(P1_asFactorOfP) % unknown the form of optimal P1
     data.obj = obj;
 end
+data.frac_TOL_golden = frac_TOL_golden;
 
 %% symbol power budget
 % Eb/N0=nP/k when the signals are complex
 % Eb/N0=nP/(2k) when the signals are real
+% the factor of 2 below is because N0=2sigma^2
 P_list = 2*k.*10.^(EbN0db_list./10)./n; 
 data.P = P_list;
 numEbN0 = length(EbN0db_list);
@@ -91,32 +94,32 @@ floor_pAUE = ones(numAlpha,numRad);
 %% Compute the RCU bounds
 for iAlpha = 1:numAlpha
     alpha = alpha_list(iAlpha);
-    fprintf('alpha=%.2f [%d/%d]\n', alpha, iAlpha, numAlpha);
+    fprintf(log_file, 'alpha=%.2f [%d/%d]\n', alpha, iAlpha, numAlpha);
     p_Ka = @(K) binopdf(K,L,1-alpha); % 1-alpha active; alpha inactive
     E_Ka = L*(1-alpha);
     for iRad = 1:numRad
         rad_l = rad_l_list(iRad); 
         rad_u = rad_u_list(iRad); 
-        fprintf('rad_l=%.2f,rad_u=%.2f [%d/%d]\n', rad_l, rad_u, iRad, numRad);
+        fprintf(log_file, 'rad_l=%.2f,rad_u=%.2f [%d/%d]\n', rad_l, rad_u, iRad, numRad);
         [floor_pMDtmp,floor_pFAtmp,floor_pAUEtmp] = ...
             RCU_floor_KaRandomUnknown_SRA(P1_asFactorOfP,rad_l,rad_u, ...
             tail_prob, n,L,E_Ka,p_Ka);
         floor_pMD(iAlpha,iRad) = floor_pMDtmp;
         floor_pFA(iAlpha,iRad) = floor_pFAtmp;
         floor_pAUE(iAlpha,iRad) = floor_pAUEtmp;
-        fprintf('\n[pMD_floor = %e]\n[pFA_floor = %e]\n[pAUE_floor = %e]\n', ...
+        fprintf(log_file, '\n[pMD_floor = %e]\n[pFA_floor = %e]\n[pAUE_floor = %e]\n', ...
             floor_pMDtmp, floor_pFAtmp, floor_pAUEtmp);
 
         data.floor_pMD = floor_pMD;
         data.floor_pFA = floor_pFA;
         data.floor_pAUE = floor_pAUE;
         for iEbN0 = 1:numEbN0
-            fprintf('Eb/N0 [%d/%d]\n', iEbN0, numEbN0);
+            fprintf(log_file, 'Eb/N0 [%d/%d]\n', iEbN0, numEbN0);
             P = P_list(iEbN0);
             if isempty(P1_asFactorOfP)
-                fprintf('P1 is empty. Optimise over P1 to minimise the objective:');
+                fprintf(log_file, 'P1 is empty. Optimise over P1 to minimise the objective:');
                 f_rcu = @(P,P1) RCU_KaRandomUnknown_SRA(P,P1, ...
-                    rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka);
+                    rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka, log_file_name);
                 % Optimise over P1 to minimise obj(p_MD,p_FA,pAUE):
                 [pMDtmp,pFAtmp,pAUEtmp,P1tmp] = ...
                     golden_search_P1_SRA(f_rcu,P/2,P,P*frac_TOL_golden, obj,[],[],[]); 
@@ -130,12 +133,12 @@ for iAlpha = 1:numAlpha
                 %           golden_search_P1_SRA(f_rcu,0,P,P/100,'weighted', ...
                 %           weight_MD,weight_FA,weight_AUE);
             else
-                fprintf('P1 is specified. Skip optimisation over P1. Directly compute RCU bounds:')
+                fprintf(log_file, 'P1 is specified. Skip optimisation over P1. Directly compute RCU bounds:')
                 P1tmp = P1_asFactorOfP * P;
                 [pMDtmp,pFAtmp,pAUEtmp] = RCU_KaRandomUnknown_SRA(...
-                    P,P1tmp,rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka);
+                    P,P1tmp,rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka, log_file_name);
             end
-            fprintf('\n[pMD = %e]\n[pFA = %e]\n[pAUE = %e]\n', pMDtmp, pFAtmp, pAUEtmp);
+            fprintf(log_file, '\n[pMD = %e]\n[pFA = %e]\n[pAUE = %e]\n', pMDtmp, pFAtmp, pAUEtmp);
             pMD(iEbN0,iAlpha,iRad) = pMDtmp;
             pFA(iEbN0,iAlpha,iRad) = pFAtmp;
             pAUE(iEbN0,iAlpha,iRad) = pAUEtmp;

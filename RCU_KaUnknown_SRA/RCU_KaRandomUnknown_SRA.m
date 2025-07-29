@@ -1,5 +1,5 @@
 function [eps_MD,eps_FA,eps_AUE] = RCU_KaRandomUnknown_SRA(P,P1, ...
-    rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka)
+    rad_l,rad_u, tail_prob, k,n,L,E_Ka,p_Ka, log_file_name)
 % Compute the RCU bounds on the misdetection, false alarm probabilities,
 % and the active user error respectively, p_MD, p_FA, p_AUE, for the
 % standard real-valued GMAC, where different users use different codebooks,
@@ -24,8 +24,9 @@ function [eps_MD,eps_FA,eps_AUE] = RCU_KaRandomUnknown_SRA(P,P1, ...
 %   eps_MD, eps_FA, eps_AUE : upper bounds on p_MD, p_FA, p_AUE given the
 %   input parameters
 
+log_file = fopen(log_file_name, 'a');
 tStart = tic;
-fprintf(['Running RCU_KaRandomUnknown_SRA which calculates pErrors for ' ...
+fprintf(log_file, ['Running RCU_KaRandomUnknown_SRA which calculates pErrors for ' ...
     'given P,P1,rad_l,rad_u...\n']);
 % codebook size
 M = 2^k;
@@ -40,7 +41,7 @@ n = n/2;
 ptilde = 1 - sum(p_Ka(K_l:K_u)) + E_Ka*gammainc(n*P/P1,n,'upper'); % our \tilde{p}
 
 if ptilde >= 1
-    fprintf('ptilde greater than 1, return\n')
+    fprintf(log_file, 'ptilde greater than 1, return\n')
     eps_MD = 1;
     eps_FA = 1;
     eps_AUE = 1;
@@ -53,7 +54,7 @@ eps_FA = ptilde;
 eps_AUE = ptilde;
 
 %% The expectation w.r.t. Ka (outer sum over Ka):
-fprintf(['Starting parfor to compute summands parameterised by Ka ' ...
+fprintf(log_file, ['Starting parfor to compute summands parameterised by Ka ' ...
     'in range [Kl=%d, Ku=%d]\n'], K_l, K_u);
 parfor Ka = K_l:K_u % parfor ignores the max{Kl,1} lower bound in eq(6)
     local_tStart = tic;
@@ -121,7 +122,7 @@ parfor Ka = K_l:K_u % parfor ignores the max{Kl,1} lower bound in eq(6)
             % we calculate and save the set of values of t1 for each t:
             t1_mat(i_t,:) = t1_l+t_vec(i_t):t1_u+t_vec(i_t);
             % Each row of t1_mat is \overline{T}_t in (23) without the zero
-            % cap on the LB, and without 2nd UB in u_t.
+            % lower bound, and without 2nd UB in u_t.
             % Thus to use the exact def of \overline{T}_t in (23) means
             % we might need to trim entries off the ends of some rows in
             % t1_mat later on.
@@ -129,13 +130,16 @@ parfor Ka = K_l:K_u % parfor ignores the max{Kl,1} lower bound in eq(6)
 
         %% Computation of pt:
 
-        % R_1 is our R_1 times t'. This makes the 1st term in E(t,t')
+        % R_1 is R_1 in our original manuscript*t'. This makes the 1st term in E(t,t')
         % rho*rho1*R1 instead of rho*rho1*t'*R1.
-        R1_f = @(n,M,t1) t1/n * log(M); % used n corresponding to complex
+        % R1_f = @(n,M,t1) t1/n * log(M); % used n corresponding to complex
+        % Corrected R1_f during TIT revision: the new R1_f is defined to be
+        % R1 in our original manuscript *t'.
+        R1_f = @(n, M, L, Ka, KaEst_l, t, t1) calculate_R1(n, M, L, Ka, KaEst_l, t, t1); % used n corresponding to complex
         % eq(18):
         R2_f = @(n,Ka,K1,t) 1/n*(gammaln(min(Ka,K1)+1)-gammaln(t+1)-gammaln(min(Ka,K1)-t+1));
 
-        % Trim off t1<0/ enforce the zero cap on LB:
+        % Trim off t1<0 entries:
         t1_mat2 = t1_mat;
         t1_mat2(t1_mat2<0) = 0;
 
@@ -184,10 +188,14 @@ parfor Ka = K_l:K_u % parfor ignores the max{Kl,1} lower bound in eq(6)
         % Compute E(t,t') as in eq(11): maximise over rho, rho1 (the 1st
         % and 2nd dimensions).
         % Ett_f is a matrix of dim num_t*num_t1
-        Ett_f = reshape(max(max(-rho.*rho1.*R1_f(n,M,t1) ...
-            - rho1.*R2_f(n,Ka,KaEst_u,t) + E0_f)), ...
-            [num_t num_t1]); % Note the 1st term in E(t,t') is
+        % Ett_f = reshape(max(max(-rho.*rho1.*R1_f(n,M,t1) ...
+        %     - rho1.*R2_f(n,Ka,KaEst_u,t) + E0_f)), ...
+        %     [num_t num_t1]); % Note the 1st term in E(t,t') is
         % rho*rho1*R1 instead of rho*rho1*t'*R1.
+        % Corrected E(t,t') during TIT revision:
+        Ett_f = reshape(max(max(-rho.*rho1.*R1_f(n,M,L,Ka,KaEst_l,t,t1) ...
+            - rho1.*R2_f(n,Ka,KaEst_u,t) + E0_f)), ...
+            [num_t num_t1]); 
 
         % Compute p_{t,t'} as in eq(10):
         % ptt is a num_t*num_t1 matrix. Along 1st dim t varies, along 2nd
@@ -270,8 +278,34 @@ end
 eps_MD = min(eps_MD,1);
 eps_FA = min(eps_FA,1);
 eps_AUE = min(eps_AUE,1);
-fprintf('epsMD=%.4f, epsFA=%.4f, epsAUE=%.4f\n', eps_MD, eps_FA, eps_AUE);
-fprintf('[RCU_KaRandomUnknown_SRA finished in %f secs]\n', toc(tStart));
+fprintf(log_file, 'epsMD=%e, epsFA=%e, epsAUE=%e\n', eps_MD, eps_FA, eps_AUE);
+fprintf(log_file, '[RCU_KaRandomUnknown_SRA finished in %f secs]\n', toc(tStart));
+end
+
+
+function R1 = calculate_R1(n, M, L, Ka, KaEst_l, t, t1)
+% Calculate tmin, r, and R1(t, t1) where R1(t, t1) is the corrected term in
+% our TIT revision.
+% Input:
+% - L, Ka, KaEst_l, M, n: scalars
+% - n: number of complex channel uses
+% - t, t1: num_rho*num_rho1*num_t*num_t1 4D tensor. they are invariant
+% across the rho and rho1 axes. There may exist some non-valid t1 values in
+% the t1 input tensor, but thats okay, lines 225 and 227 will discard 
+% corresponding entries.
+% Output:
+% - R1: num_rho*num_rho1*num_t*num_t1 4D tensor (tmin, r are also num_rho*num_rho1*num_t*num_t1 4D tensors)
+
+assert(length(n)==1 && length(M)==1 && length(L)==1 && length(Ka)==1 && ...
+    length(KaEst_l)==1, "n, M, L, Ka, KaEst_L are scalars");
+assert(isequal(size(t), size(t1)), "t and t1 have equal size");
+% Calculate pairwise minimum
+tmin = ((t + t1) - abs(t - t1)) / 2;
+% Calculate r
+r = L - Ka + tmin - max(KaEst_l - Ka, 0) - max(t1 - t, 0);
+% Calculate R1
+R1 = (1/n) * (tmin * log(M) + gammaln(r+1) - gammaln(tmin+1) - gammaln(r-tmin+1));
+assert(isequal(size(t), size(R1)), "t and R1 have equal size");
 end
 
 function [sumMD, sumFA, sumAUE] = sum_psi(L,M,Ka,KaEst_l,KaEst_u,t,t1,t1_nonneg)

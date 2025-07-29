@@ -1,6 +1,6 @@
 function [epsMD, epsFA, epsAUE, epsTotal, P,optP1, data] = ...
     binary_search_P_SRA(f,P_l,P_u,target_epsTotal,TOL_binary, ...
-    P1_asFactorOfP, frac_TOL_golden)
+    P1_asFactorOfP, frac_TOL_golden, log_file_name)
 % Search for P\in [P_l,P_u] such that the total error i.e. 
 % max(eps_MD,eps_FA)+eps_AUEeps_MD \in [target_epsTotal-TOL, target_epsTotal]
 % where eps_MD, eps_FA and eps_AUE are obtained from a f(P,P1).
@@ -17,9 +17,10 @@ function [epsMD, epsFA, epsAUE, epsTotal, P,optP1, data] = ...
 % No maximum iteration limit for binary search.
 % data: for debugging use.
 
+log_file = fopen(log_file_name, 'a');
 assert(P_l>=0 & P_u>=0, "P_l,P_u must be non-negative");
 tStart = tic;
-fprintf('Running binary_search_P_SRA...\n');
+fprintf(log_file, 'Running binary_search_P_SRA...\n');
 
 % Store the following quantities for each iteration:
 % The first two entries store the initialisation f(P_l), f(P_u):
@@ -87,7 +88,8 @@ else
     % Use binary search until the target is found, without iteration limits.     
     while (epsTotal_l >= epsTotal_u)
         i_iter = i_iter+1;
-        fprintf('binary search num_iter=%d\n', i_iter);
+        fprintf(log_file, 'binary search num_iter=%d, P_l=%e, P_u=%e\n', ...
+            i_iter, P_l, P_u);
         x_mid = (P_l+P_u)/2;
         [epsMD_mid,epsFA_mid,epsAUE_mid,P1_mid] = find_eps_P1(x_mid); 
         epsTotal_mid = max(epsMD_mid, epsFA_mid) + epsAUE_mid;
@@ -104,10 +106,10 @@ else
             epsAUE = epsAUE_mid;
             epsTotal = epsTotal_mid;
             optP1 = P1_mid;
-            fprintf('binary search converged num_iter=%d\n', i_iter);
+            fprintf(log_file, 'binary search converged num_iter=%d\n', i_iter);
 
             data = save_data(i_iter, P_list, epsTotal_list, optP1_list);
-            fprintf('[binary_search_P_SRA completed in %.2f secs]\n', toc(tStart));
+            fprintf(log_file, '[binary_search_P_SRA completed in %.2f secs]\n', toc(tStart));
             return;
         elseif target_epsTotal > epsTotal_mid 
             P_u = x_mid; % target power is in the lower-half, so update UB
